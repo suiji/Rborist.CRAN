@@ -8,8 +8,7 @@ Maintainer: Mark Seligman <mseligman@suiji.org>
 BugReports: https://github.com/suiji/Arborist/issues
 Description: Scalable implementation of classification and regression forests, as described by Breiman (2001), <DOI:10.1023/A:1010933404324>.
 URL: https://github.com/suiji/Rborist.CRAN,
-        https://github.com/suiji/Arborist,
-        http://www.suiji.org/arborist
+        https://github.com/suiji/Arborist
 License: MPL (>= 2) | GPL (>= 2) | file LICENSE
 LazyLoad: yes
 Depends: R(>= 3.3)
@@ -18,4 +17,4 @@ Suggests: testthat, knitr, rmarkdown, markdown
 VignetteBuilder: knitr
 LinkingTo: Rcpp
 NeedsCompilation: yes
-Packaged: 2023-07-21 15:16:33 UTC; mseligman
+Packaged: 2023-07-23 18:32:31 UTC; mseligman
