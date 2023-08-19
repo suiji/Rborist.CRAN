@@ -38,6 +38,11 @@ const string FBTrain::strFactor = "factor";
 const string FBTrain::strFacSplit = "facSplit";
 const string FBTrain::strObserved = "observed";
 
+const string FBTrain::strScoreDesc = "scoreDesc";
+const string FBTrain::strNu = "nu";
+const string FBTrain::strBaseScore = "baseScore";
+const string FBTrain::strForestScorer = "scorer";
+
 
 FBTrain::FBTrain(unsigned int nTree_) :
   nTree(nTree_),
@@ -55,6 +60,7 @@ void FBTrain::bridgeConsume(const ForestBridge& bridge,
 			    double scale) {
   nodeConsume(bridge, tIdx, scale);
   factorConsume(bridge, tIdx, scale);
+  bridge.getScoreDesc(nu, baseScore, forestScorer);
 }
 
 
@@ -126,6 +132,7 @@ List FBTrain::wrap() {
   BEGIN_RCPP
   List forest =
     List::create(_[strNTree] = nTree,
+		 _[strScoreDesc] = std::move(summarizeScoreDesc()),
 		 _[strNode] = std::move(wrapNode()),
 		 _[strScores] = std::move(scores),
 		 _[strFactor] = std::move(wrapFactor())
@@ -141,7 +148,17 @@ List FBTrain::wrap() {
 }
 
 
-ForestBridge ForestR::unwrap(const List& lTrain) {
+List FBTrain::summarizeScoreDesc() {
+  return List::create(
+		      _[strNu] = nu,
+		      _[strBaseScore] = baseScore,
+		      _[strForestScorer] = forestScorer
+		      );
+}
+
+
+ForestBridge ForestR::unwrap(const List& lTrain,
+			     bool categorical) {
   List lForest(checkForest(lTrain));
   List lNode((SEXP) lForest[FBTrain::strNode]);
   List lFactor((SEXP) lForest[FBTrain::strFactor]);
@@ -151,7 +168,24 @@ ForestBridge ForestR::unwrap(const List& lTrain) {
 		      as<NumericVector>(lForest[FBTrain::strScores]).begin(),
 		      as<NumericVector>(lFactor[FBTrain::strExtent]).begin(),
 		      as<RawVector>(lFactor[FBTrain::strFacSplit]).begin(),
-		      as<RawVector>(lFactor[FBTrain::strObserved]).begin());
+		      as<RawVector>(lFactor[FBTrain::strObserved]).begin(),
+		      unwrapScoreDesc(lForest, categorical));
+}
+
+
+tuple<double, double, string> ForestR::unwrapScoreDesc(const List& lForest,
+						       bool categorical) {
+  // Legacy RF implementations did not record a score descriptor,
+  // so one is created on-the-fly:
+  if (!lForest.containsElementNamed("scoreDesc")) {
+    if (categorical)
+      return make_tuple<double, double, string>(0.0, 0.0, "plurality");
+    else
+      return make_tuple<double, double, string>(0.0, 0.0, "mean");
+  }
+  
+  List lScoreDesc(as<List>(lForest[FBTrain::strScoreDesc]));
+  return make_tuple<double, double>(as<double>(lScoreDesc[FBTrain::strNu]), as<double>(lScoreDesc[FBTrain::strBaseScore]), as<string>(lScoreDesc[FBTrain::strForestScorer]));
 }
 
 
@@ -177,7 +211,9 @@ ForestExpand ForestExpand::unwrap(const List& lTrain,
 
 ForestExpand::ForestExpand(const List &lTrain,
                            const IntegerVector& predMap) {
+  // Leaving legacy categorical flag turned off:  not quite correct.
   ForestBridge forestBridge = ForestR::unwrap(lTrain);
+
   predTree = vector<vector<unsigned int>>(forestBridge.getNTree());
   bumpTree = vector<vector<size_t> >(forestBridge.getNTree());
   splitTree = vector<vector<double > >(forestBridge.getNTree());
