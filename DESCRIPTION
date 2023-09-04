@@ -17,4 +17,4 @@ Suggests: testthat, knitr, rmarkdown, markdown
 VignetteBuilder: knitr
 LinkingTo: Rcpp
 NeedsCompilation: yes
-Packaged: 2023-09-03 23:36:08 UTC; mseligman
+Packaged: 2023-09-04 23:57:42 UTC; mseligman
