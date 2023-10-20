@@ -43,7 +43,7 @@ struct SamplerBridge {
   /**
      @brief Training constructor:  classification.
    */
-  SamplerBridge(const vector<unsigned int>& yTrain,
+  SamplerBridge(vector<unsigned int> yTrain,
 		size_t nSamp,
 		unsigned int nTree,
 		const double samples[],
@@ -54,30 +54,27 @@ struct SamplerBridge {
   /**
      @brief Training constuctor:  regression.
    */
-  SamplerBridge(const vector<double>& yTrain,
+  SamplerBridge(vector<double> yTrain,
 		size_t nSamp,
 		unsigned int nTree,
 		const double samples[]);
 
-  
-  /**
-     @param bagging specifies a bagging matrix:  prediction only.
-   */
-  SamplerBridge(const vector<double>& yTrain,
+  SamplerBridge(vector<double> yTrain,
 		size_t nSamp,
 		unsigned int nTree,
 		const double samples[],
-		bool bagging);
+		unique_ptr<struct RLEFrame> rleFrame);
 
 
-  SamplerBridge(const vector<unsigned int>& yTrain,
+
+  SamplerBridge(vector<unsigned int> yTrain,
 		unsigned int nCtg,
 		size_t nSamp,
 		unsigned int nTree,
 		const double samples[],
-		bool bagging);
+		unique_ptr<struct RLEFrame> rleFrame);
 
-  
+
   /**
      @brief Generic constructor.
    */
@@ -126,6 +123,21 @@ struct SamplerBridge {
    */
   void dumpNux(double nuxOut[]) const;
 
+
+  /**
+     @return true iff response is categorical.
+   */
+  bool categorical() const;
+
+
+  unique_ptr<struct PredictRegBridge> predictReg(struct ForestBridge&,
+						 vector<double> yTest) const;
+
+  
+  unique_ptr<struct PredictCtgBridge> predictCtg(struct ForestBridge&,
+						 vector<unsigned int> yTest) const;
+
+  
   
 private:
 

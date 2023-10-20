@@ -16,182 +16,128 @@
 #ifndef FOREST_PREDICT_H
 #define FOREST_PREDICT_H
 
+#include "prediction.h"
+#include "predictframe.h"
 #include "block.h"
 #include "typeparam.h"
 #include "bv.h"
-#include "decnode.h"
 
 #include <vector>
 #include <algorithm>
 
 
 /**
-   @brief Encapsulates options specifying prediction.   
+   @brief Regression-specific prediction summary.
  */
-struct PredictOption {
-  unsigned int nPermute; ///< 0/1:  # permutations to perform.
-  bool trapUnobserved; ///< exits at nonterminal on unobserved value.
-  bool indexing; ///< reports index of prediction, typically terminal.
+struct SummaryReg {
+  unique_ptr<ForestPredictionReg> prediction;
+  unique_ptr<TestReg> test;
+  vector<vector<unique_ptr<TestReg>>> permutationTest;
 
-  PredictOption(unsigned int nPermute_,
-		bool indexing_,
-		bool trapUnobserved_) :
-    nPermute(nPermute_),
-    trapUnobserved(trapUnobserved_),
-    indexing(indexing_) {
+  SummaryReg(const class Sampler* sampler,
+	     const class Predict* predict,
+	     class Forest* forest);
+
+
+  void build(class Predict* predict,
+	     const class Sampler* sampler,
+	     const vector<double>& yTest);
+
+
+  static vector<vector<unique_ptr<TestReg>>> permute(const class Predict* predict,
+						     const class Sampler* sampler,
+						     const vector<double>& yTest);
+
+  size_t getNObs() const {
+    return prediction->getNObs();
   }
+
+
+  /**
+     @return handle to cached index vector.
+   */
+  const vector<size_t>& getIndices() const {
+    return prediction->idxFinal;
+  }
+
+  
+  const vector<double>& getYPred() const;
+
+
+  /**
+     @brief Passes through to TestReg.
+
+     @return SSE if testing, else zero.
+   */
+  double getSSE() const;
+
+
+  /**
+     @brief Passes through to TestReg.
+     
+     @return if testing absolute error else zero.
+   */
+  double getSAE() const;
+
+
+  /**
+     @return vector of estimated quantile means.
+   */
+  const vector<double>& getQEst() const;
+
+
+  /**
+     @return vector quantile predictions.
+  */
+  const vector<double>& getQPred() const;
+
+
+  vector<vector<double>> getSSEPermuted() const;
+
+
+  vector<vector<double>> getSAEPermuted() const;
 };
 
 
 /**
-   @brief Walks the decision forest for each row in a block, collecting
-   predictions.
+   @brief Classification-specific prediction summary.
  */
-class Predict {
-protected:
-  static const size_t scoreChunk; ///< Score block dimension.
-  static const unsigned int seqChunk;  ///< Effort to minimize false sharing.
+struct SummaryCtg {
+  CtgT nCtgTrain;  // Census, prob only accessible by training categories.
+  unique_ptr<ForestPredictionCtg> prediction;
+  unique_ptr<TestCtg> test;
+  vector<vector<unique_ptr<TestCtg>>> permutationTest;
 
-  const bool trapUnobserved; ///< Whether to trap values unobserved during training.
-  const class Sampler* sampler; ///< In-bag representation.
-  unique_ptr<class ForestScorer> scorer; ///< Algorithm-specific scoring.
-  const vector<vector<DecNode>> decNode; ///< Forest-wide decision nodes.
-  const vector<unique_ptr<BV>>& factorBits; ///< Splitting bits.
-  const vector<unique_ptr<BV>>& bitsObserved; ///< Bits participating in split.
-  const bool testing; ///< Whether to compare prediction with test vector.
-  const unsigned int nPermute; ///< # times to permute each predictor.
+  SummaryCtg(const class Sampler* sampler,
+	     const class Predict* predict,
+	     class Forest* forest);
 
-  vector<IndexT> idxFinal; ///< Final walk index, typically terminal.
-
-  size_t blockStart; ///< Stripmine bound.
-  vector<IndexT> accumNEst;
-
-  size_t nEst; ///< Total number of estimands.
   
-  
+  void build(class Predict* predict,
+	     const class Sampler* sampler,
+	     const vector<unsigned int>& yTest);
+
+
+  static vector<vector<unique_ptr<TestCtg>>> permute(const class Predict* predict,
+						     const class Sampler* sampler,
+						     const vector<unsigned int>& yTest);
+
+
   /**
-     @brief Assigns a relative node index at the prediction coordinates passed.
+     @brief Derives an index into a matrix having stride equal to the
+     number of training categories.
+     
+     @param row is the row coordinate.
 
-     @param row is the row number.
-
-     @param tc is the index of the current tree.
+     @return derived strided index.
    */
-  inline void predictLeaf(unsigned int tIdx,
-			  size_t obsIdx) {
-    idxFinal[nTree * (obsIdx - blockStart) + tIdx] = (this->*Predict::walkObs)(tIdx, obsIdx);
+  size_t ctgIdx(size_t row, PredictorT ctg = 0) const {
+    return row * nCtgTrain + ctg;
   }
 
 
-  /**
-     @brief Performs prediction on separately-permuted predictor columns.
-
-     @param permute is the number of times to permute each predictor.
-   */
-  void predictPermute(struct RLEFrame* rleFrame);
-  
-
-  /**
-     @brief Drives prediction strip-mining and residual.
-xon   */
-  void blocks(const struct RLEFrame* rleFrame);
-  
-  
-  /**
-     @brief Strip-mines prediction by fixed-size blocks.
-
-     @param[in, out] trIdx caches RLE index accessed by a predictor.
-   */
-  size_t predictBlock(const struct RLEFrame* rleFrame,
-		      size_t row,
-		      size_t extent,
-		      vector<size_t>& trIdx);
-
-  /**
-     @brief Transposes typed blocks, prediction-style.
-
-     @param[in,out] idxTr is the most-recently accessed RLE index, by predictor.
-
-     @param rowStart is the starting source row.
-
-     @param rowExtent is the total number of rows to transpose.
-   */
-  void transpose(const RLEFrame* rleFrame,
-		 vector<size_t>& idxTr,
-		 size_t rowStart,
-		 size_t rowExtent);
-
-  /**
-     @brief Predicts along each tree.
-
-     @param rowStart is the absolute starting row for the block.
-  */
-  void walkTree(size_t rowStart);
-
-
-  /**
-     @brief Predicts a block of observations in parallel.
-   */
-  void predictObs(size_t span);
-
-
-  /**
-     @brief Predicts sequentially to minimize false sharing.
-   */
-  virtual void scoreSeq(size_t rowStart,
-			size_t rowEnd) = 0;
-
-
-  /**
-     @brief Accumulates type-based estimates.
-   */
-  virtual void estAccum();
-
-
-  virtual void setPermuteTarget(PredictorT predIdx) = 0;
-
-public:
-
-  const vector<vector<double>> scoreBlock; ///< Scores, by tree.
-  const PredictorT nPredNum;
-  const PredictorT nPredFac;
-  const size_t nObs;
-  const unsigned int nTree; // # trees used in training.
-  const IndexT noNode; // Inattainable leaf index value.
-
-  /**
-     @brief Aliases a row-prediction method tailored for the frame's
-     block structure.
-   */
-  IndexT (Predict::* walkObs)(unsigned int, size_t);
-  IndexT (Predict::* getObsWalker())(unsigned int, size_t);
-  
-  vector<CtgT> trFac; ///< OTF transposed factor observations.
-  vector<double> trNum; ///< OTF transposed numeric observations.
-  vector<size_t> indices; ///< final index of traversal.
-  
-  Predict(const class Forest* forest_,
-	  const class Sampler* sampler_,
-	  struct RLEFrame* rleFrame_,
-	  bool testing_,
-	  const PredictOption& option);
-
-
-  virtual ~Predict() = default;
-
-  /**
-     @brief Main entry from bridge.
-
-     Distributed prediction will require start and extent parameters.
-   */
-  void predict(struct RLEFrame* rleFrame);
-
-
-  /**
-     @brief Indicates whether to exit tree prematurely when an unrecognized
-     obervation is encountered.
-   */
-  bool trapAndBail() const {
-    return trapUnobserved;
+  size_t getNObs() const {
+    return prediction->getNObs();
   }
 
   
@@ -199,137 +145,191 @@ public:
      @return handle to cached index vector.
    */
   const vector<size_t>& getIndices() const {
-    return indices;
+    return prediction->idxFinal;
   }
 
+
+  const vector<CtgT>& getYPred() const;
+
+  const vector<size_t>& getConfusion() const;
+
   
-  const class Sampler* getSampler() const {
-    return sampler;
-  }
+  const vector<double>& getMisprediction() const;
+
+  double getOOBError() const;
 
 
   /**
-     @brief Computes block-relative position for a predictor.
-
-     @param[out] thisIsFactor outputs true iff predictor is factor-valued.
-
-     @return block-relative index.
+     @brief Passes through to scorer.
    */
-  inline unsigned int getIdx(PredictorT predIdx, bool &predIsFactor) const {
-    predIsFactor = isFactor(predIdx);
-    return predIsFactor ? predIdx - nPredNum : predIdx;
+  const vector<unsigned int>& getCensus() const;
+
+
+  /**
+     @brief Passes through to scorer.
+
+     @return reference to per-category probability predictions.
+   */
+  const vector<double>& getProb() const;
+
+
+  vector<vector<vector<double>>> getMispredPermuted() const;
+
+
+  vector<vector<double>> getOOBErrorPermuted() const;
+};
+
+
+/**
+   @brief Invokes virtual prediction methods.
+ */
+class Predict {
+protected:
+  static const size_t obsChunk; ///< Observation block dimension.
+  static const unsigned int seqChunk;  ///< Effort to minimize false sharing.
+
+  const unique_ptr<class BitMatrix> bag; ///< Nonnull iff bagging.
+  unique_ptr<struct RLEFrame> rleFrame;
+  const size_t nObs; ///< # observations under prediction.
+
+  // Prediction state:
+  unsigned int nTree; ///< Initialized by Forest under prediction.
+  IndexT noNode; ///< Initialized by Forest under prediction.
+  PredictFrame trFrame; ///< Initialized by RLEFrame, reset per block.
+  size_t blockStart; ///< Index of observation heading current block.
+  vector<IndexT> idxFinal; ///< Final walk index, typically terminal.
+
+  void predictBlock(ForestPrediction* prediction);
+
+
+  void predictObs(class ForestPrediction* prediction,
+		  size_t span);
+
+
+  void resetIndices();
+
+
+  void walkTree(const PredictFrame& frame,
+		size_t obsStart,
+		size_t obsEnd);
+
+
+  void setFinalIdx(size_t obsIdx, unsigned int tIdx, IndexT finalIdx) {
+    idxFinal[nTree * (obsIdx - blockStart) + tIdx] = finalIdx;
   }
+
+
+public:
+
+  static bool bagging; ///< True iff bagging.
 
   
-  inline bool isFactor(PredictorT predIdx) const {
-    return predIdx >= nPredNum;
-  }
+  static unsigned int nPermute; ///< # times to permute each predictor.
+
+
+  class Forest* forest; ///< Set at prediction.
+
+
+  /**
+     @brief Static initializations per invocation.
+   */
+  static void init(bool bagging_,
+		   unsigned int nPermute_);
 
   
   /**
-     @return number of observations under prediction.
-   */
-  size_t getNObs() const {
-    return nObs;
-  }
-  
+     @brief Resets static values.
+   */  
+  static void deInit();
 
-  inline unsigned int getNTree() const {
+  
+  Predict(const class Sampler* sampler,
+	  unique_ptr<struct RLEFrame> rleFrame_);
+
+
+  virtual ~Predict() = default;
+
+
+  static unique_ptr<class PredictCtg> makeCtg(const class Sampler* sampler,
+					      unique_ptr<struct RLEFrame>);
+
+
+  static unique_ptr<class PredictReg> makeReg(const class Sampler* sampler,
+					      unique_ptr<struct RLEFrame>);
+
+
+  virtual unique_ptr<SummaryReg> predictReg(const class Sampler* sampler,
+					    class Forest* forest,
+					    const vector<double>& yTest) {
+    return nullptr;
+  }
+
+
+  virtual unique_ptr<SummaryCtg> predictCtg(const class Sampler* sampler,
+					    class Forest* forest,
+					    const vector<unsigned int>& yTest) {
+    return nullptr;
+  }
+
+
+  struct RLEFrame* getFrame() const {
+    return rleFrame.get();
+  }
+
+
+  unsigned int getNTree() const {
     return nTree;
   }
 
 
-  /**
-     @param[out] termIdx is the node index of prediction.
+  size_t getNObs() const {
+    return nObs;
+  }
 
-     @return true iff the predicted terminal index references a leaf.
-   */
-  bool isLeafIdx(size_t row,
+
+  bool isNodeIdx(size_t obsIdx,
+		 unsigned int tIdx,
+		 double& score) const;
+
+
+  bool isLeafIdx(size_t obsIdx,
 		 unsigned int tIdx,
 		 IndexT& leafIdx) const;
 
 
   /**
-     @brief As above, but outputs node score.
-   */
-  inline bool isNodeIdx(size_t row,
-			unsigned int tIdx,
-			double& score) const {
-    IndexT termIdx = idxFinal[nTree * (row - blockStart) + tIdx];
-    if (termIdx != noNode) {
-      score = scoreBlock[tIdx][termIdx];
-      return true;
-    }
-    else {
-      return false;
-    }
-    // Non-bagging scenarios should always see a leaf.
-    //    if (!bagging) assert(termIdx != noNode);
-  }
+     @param[out] nodeIdx is the final index of the tree walk.
 
-  
-  /**
-     @brief As above, but outputs node index.
-   */
-  bool isNodeIdx(size_t row,
-		 unsigned int tIdx,
-		 IndexT& nodeIdx) const {
-    nodeIdx = idxFinal[nTree * (row - blockStart) + tIdx];
+     @return true iff final index is a valid node.
+  */
+  bool getFinalIdx(size_t obsIdx, unsigned int tIdx, IndexT& nodeIdx) const {
+    nodeIdx = idxFinal[nTree * (obsIdx - blockStart) + tIdx];
     return nodeIdx != noNode;
   }
 
-  
-  /**
-     @brief Computes pointer to base of row of numeric values.
-
-     @param row is the row number.
-
-     @return base address for numeric values at row.
-  */
-  inline const double* baseNum(size_t row) const {
-    return &trNum[(row - blockStart) * nPredNum];
-  }
-
 
   /**
-     @brief As above, but factor varlues.
+     @brief Determines whether a given forest coordinate is bagged.
 
-     @return row is the row number.
+     @param tIdx is the tree index.
+
+     @param row is the row index.
+
+     @return true iff bagging and the coordinate bit is set.
    */
-  inline const CtgT* baseFac(size_t row) const {
-    return &trFac[(row - blockStart) * nPredFac];
+  inline bool isBagged(unsigned int tIdx, size_t row) const {
+    return bagging && bag->testBit(tIdx, row);
   }
 
   
-  /**
-     @brief Prediction over an observation with mixed predictor types.
-
-     @param obsIdx is the absolute row of data over which a prediction is made.
-
-     @return index of node predicted.
-  */
-  IndexT obsMixed(unsigned int tIdx,
-		  size_t obsIdx);
+  static bool permutes() {
+    return nPermute > 0;
+  }
 
 
-  /**
-     @brief Prediction over an observation with factor-valued predictors only.
+  void predict(ForestPrediction* prediction);
 
-     Parameters as in mixed case, above.
-  */
-  IndexT obsFac(unsigned int tIdx,
-		size_t obsIdx);
-
-
-  /**
-     @brief Prediction over an observation with numeric-valued predictors only.
-
-     Parameters as in mixed case, above.
-   */
-  IndexT obsNum(unsigned int tIdx,
-		size_t obsIdx);
-
-
+  
   /**
      @brief Computes Meinshausen's weight vectors for a block of predictions.
 
@@ -341,15 +341,12 @@ public:
    */
   static vector<double> forestWeight(const class Forest* forest,
 					     const class Sampler* sampler,
-					     const struct Leaf* leaf,
 					     size_t nPredict,
-					     const double finalIdx[],
-					     unsigned int nThread);
+				     const double finalIdx[]);
 
 
   static vector<vector<struct IdCount>> obsCounts(const class Forest* forest,
 						  const class Sampler* sampler,
-						  const struct Leaf* leaf,
 						  unsigned int tIdx);
 
 
@@ -369,210 +366,32 @@ public:
 };
 
 
-class PredictReg : public Predict {
-  const class ResponseReg* response;
-  const vector<double> yTest;
-  vector<double> yPred;
-  vector<double> yPermute; // Reused.
+struct PredictReg : public Predict {
 
-  vector<double> accumAbsErr; // One slot per predictor.
-  vector<double> accumSSE; // " "
-
-  double saePredict;
-  double ssePredict;
-  vector<double> saePermute;
-  vector<double> ssePermute;
-
-  vector<double>* yTarg; // Target of current prediction.
-  double* saeTarg;
-  double* sseTarg;
-  
-  void testObs(size_t row);
-
-  unsigned int scoreObs(size_t row);
-
-public:
-  PredictReg(const class Forest* forest_,
-	     const class Sampler* sampler_,
-	     const struct Leaf* leaf_,
-	     struct RLEFrame* rleFrame_,
-	     const vector<double>& yTest_,
-	     const PredictOption& option,
-	     vector<double> quantile);
+  PredictReg(const class Sampler* sampler,
+	     unique_ptr<struct RLEFrame> rleFrame_);
 
 
-  /**
-     @brief Description given in virtual declartion.
-   */
-  void scoreSeq(size_t rowStart,
-		size_t rowEnd);
+  ~PredictReg() = default;
 
-
-  void estAccum();
-
-
-  void setPermuteTarget(PredictorT predIdx);
-
-
-  double getSSE() const {
-    return ssePredict;
-  }
-
-
-  const vector<double>& getSSEPermuted() const {
-    return ssePermute;
-  }
-
-
-  
-  double getSAE() const {
-    return saePredict;
-  }
-
-
-  const vector<double>& getSAEPermuted() const {
-    return saePermute;
-  }
-  
-
-  const vector<double>& getYTest() const {
-    return yTest;
-  }
-  
-  
-  const vector<double>& getYPred() const {
-    return yPred;
-  }
-
-
-  inline double getYPred(size_t row) const {
-    return yPred[row];
-  }
-  
-
- /**
-     @return vector of estimated quantile means.
-   */
-  const vector<double>& getQEst() const;
-
-
-  /**
-     @return vector quantile predictions.
-  */
-  const vector<double>& getQPred() const;
+  unique_ptr<SummaryReg> predictReg(const class Sampler* sampler,
+				    class Forest* forest,
+				    const vector<double>& yTest);
 };
 
 
-class PredictCtg : public Predict {
-  const class ResponseCtg* response;
-  const vector<PredictorT> yTest;
-  vector<PredictorT> yPred;
-  const PredictorT nCtgTrain; // Cardiality of training response.
-  const PredictorT nCtgMerged; // Cardinality of merged test response.
+struct PredictCtg : public Predict {
 
-  vector<PredictorT> yPermute; // Reused.
-  vector<size_t> confusion; // Confusion matrix; saved.
-  vector<double> misprediction; // Mispredction, by merged category; saved.
-  double oobPredict; // Out-of-bag error:  % mispredicted rows.
-  vector<unsigned int> censusPermute; // Workspace census for permutations.
-  vector<size_t> confusionPermute; // Workspace for permutation.
-  vector<vector<double>> mispredPermute; // Saved values for permutation.
-  vector<double> oobPermute;
-  vector<CtgT>* yTarg; // Target of current prediction.
-  vector<size_t>* confusionTarg;
-  vector<unsigned int>* censusTarg; // Destination of prediction census.
-  vector<double>* mispredTarg;
-  double *oobTarg;
-
-  void testObs(size_t row);
-
-  unsigned int scoreObs(size_t row);
+  PredictCtg(const class Sampler* sampler,
+	     unique_ptr<struct RLEFrame> rleFrame_);
 
   
-public:
-
-  PredictCtg(const class Forest* forest_,
-	     const class Sampler* sampler_,
-	     struct RLEFrame* rleFrame_,
-	     //	     const struct ScoreDesc& scoreDesc,
-	     const vector<PredictorT>& yTest_,
-	     const PredictOption& option,
-	     bool doProb);
+  ~PredictCtg() = default;
 
 
-  /**
-     @brief Description given in virtual declartion.
-   */
-  void scoreSeq(size_t rowStart,
-		size_t rowEnd);
-
-
-  /**
-     @brief Derives an index into a matrix having stride equal to the
-     number of training categories.
-     
-     @param row is the row coordinate.
-
-     @return derived strided index.
-   */
-  size_t ctgIdx(size_t row, PredictorT ctg = 0) const {
-    return row * nCtgTrain + ctg;
-  }
-
-
-  const vector<PredictorT>& getYPred() const {
-    return yPred;
-  }
-
-
-  const vector<size_t>& getConfusion() const {
-    return confusion;
-  }
-
-
-  const vector<double>& getMisprediction() const {
-    return misprediction;
-  }
-
-
-  const vector<vector<double>>& getMispredPermuted() const {
-    return mispredPermute;
-  }
-
-
-  double getOOBError() const {
-    return oobPredict;
-  }    
-
-
-  const vector<double>& getOOBErrorPermuted() const {
-    return oobPermute;
-  }
-  
-  
-  PredictorT getNCtgTrain() const {
-    return nCtgTrain;
-  }
-
-
-  void estAccum();
-
-
-  void setMisprediction();
-
-  void setPermuteTarget(PredictorT predIdx);
-
-  
-  /**
-     @brief Passes through to scorer.
-   */
-  const vector<unsigned int>& getCensus() const;
-
-
-  /**
-     @brief Passes through to scorer.
-   */
-  const vector<double>& getProb() const;
+  unique_ptr<SummaryCtg> predictCtg(const class Sampler* sampler,
+				    class Forest* forest,
+				    const vector<unsigned int>& yTest);
 
 
   /**

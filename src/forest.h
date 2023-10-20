@@ -17,8 +17,8 @@
 #ifndef FOREST_FOREST_H
 #define FOREST_FOREST_H
 
-#include "decnode.h"
-#include "bv.h"
+#include "dectree.h"
+#include "leaf.h"
 #include "typeparam.h"
 #include "scoredesc.h"
 
@@ -30,14 +30,11 @@
    @brief The decision forest as a read-only collection.
 */
 class Forest {
-  const unsigned int nTree; ///< # trees in chunk under training.
-  const vector<vector<DecNode>> decNode;
-  const vector<vector<double>> scores; //< Per node.
-  const vector<unique_ptr<BV>> factorBits; ///< All factors known at training.
-  const vector<unique_ptr<BV>> bitsObserved; ///< Factors observed at splitting.
-
-
-  ScoreDesc scoreDesc; ///< Prediction only.
+  vector<DecTree> decTree; ///< New representation; ultimately constant.
+  const ScoreDesc scoreDesc;
+  const Leaf leaf;  //  const unique_ptr<class Leaf> leaf;
+  const size_t noNode; ///< Inattainable node index.
+  const unsigned int nTree;
 
 
   void dump(vector<vector<PredictorT>>& predTree,
@@ -48,42 +45,45 @@ class Forest {
  public:
 
   static void init(PredictorT nPred) {
-    DecNode::init(nPred);
+    DecNode::initMasks(nPred);
   }
 
 
   static void deInit() {
     DecNode::deInit();
+    RankCount::unsetMasks();
+  }
+
+
+  /**
+     @param decTree is built OTF.
+
+     @param leaf_ may or may not be populated by caller.
+   */
+  Forest(vector<DecTree>&& decTree,
+	 const tuple<double, double, string>& scoreDesc_,
+	 Leaf&& leaf_);
+
+
+  /**
+     @brief Initializes walker state.  Ultimately deprecated.
+   */
+  void initWalkers(const class PredictFrame& trFrame);
+
+
+  IndexT walkObs(const class PredictFrame& frame,
+		 size_t obsIdx,
+		 unsigned int tIdx) const {
+    return decTree[tIdx].walkObs(frame, obsIdx);
   }
 
   
-  /**
-     Post-training constructor.
-   */
-  Forest(const vector<vector<DecNode>> decNode_,
-	 vector<vector<double>> scores_,
-	 vector<unique_ptr<BV>> factorBits_,
-	 vector<unique_ptr<BV>> bitsObserved_,
-	 const tuple<double, double, string>& scoreDesc_);
-
-
   /**
      @brief Maps leaf indices to the node at which they appear.
    */
   vector<IndexT> getLeafNodes(unsigned int tIdx,
 			      IndexT extent) const;
 
-  
-  /**
-     @brief Produces height vector from numeric representation.
-
-     Front ends not supporting 64-bit integers can represent extent
-     vectors as doubles.
-
-     @return non-numeric height vector.
-   */
-  vector<size_t> produceHeight(const vector<size_t>& extent_) const;
-  
 
   /**
      @brief Getter for 'nTree'.
@@ -94,22 +94,36 @@ class Forest {
     return nTree;
   }
 
-  
-  /**
-     @brief Getter for node record vector.
-
-     @return reference to node vector.
-   */
-  const vector<vector<DecNode>>& getNode() const {
-    return decNode;
-  }
-
 
   const vector<DecNode>& getNode(unsigned int tIdx) const {
-    return decNode[tIdx];
+    return decTree[tIdx].getNode();
+  }
+
+  
+  size_t getNoNode() const {
+    return noNode;
   }
 
 
+  bool getLeafIdx(unsigned int tIdx,
+		  IndexT nodeIdx,
+		  IndexT& leafIdx) const {
+    return decTree[tIdx].getLeafIdx(nodeIdx, leafIdx);
+  }
+  
+
+  double getScore(unsigned int tIdx,
+		  IndexT nodeIdx) const {
+    return decTree[tIdx].getScore(nodeIdx);
+  }
+
+
+  //  const struct Leaf* getLeaf() const;
+  const Leaf& getLeaf() const {
+    return leaf;
+  }
+
+  
   /**
      @return vector of domininated leaf ranges, per node.
    */
@@ -122,45 +136,22 @@ class Forest {
   vector<vector<IndexRange>> leafDominators() const;
 
 
-  inline const vector<unique_ptr<BV>>& getFactorBits() const {
-    return factorBits;
-  }
-
-  
-  inline const vector<unique_ptr<BV>>& getBitsObserved() const {
-    return bitsObserved;
-  }
-
-
   /**
      @brief Computes an inattainable node index.
 
      @return maximum tree extent.
    */
-  size_t noNode() const;
-
-  
-  /**
-     @return per-tree vector of scores.
-   */
-  const vector<vector<double>>& getTreeScores() const {
-    return scores;
-  }
-
-  
-  /**
-     @brief Passes through to ScoreDesc method.
-   */
-  unique_ptr<class ForestScorer> makeScorer(const class ResponseReg* response,
-					    const class Forest* forest,
-					    const class Leaf* leaf,
-					    const class PredictReg* predict,
-					    vector<double> quantile) const;
+  static size_t maxHeight(const vector<DecTree>& decTree);
 
 
-  unique_ptr<class ForestScorer> makeScorer(const class ResponseCtg* response,
-					    size_t nObs,
-					    bool doProb) const;
+  unique_ptr<ForestPredictionReg> makePredictionReg(const class Sampler* sampler,
+						    const class Predict* predict,
+						    bool reportAuxiliary = true);
+
+
+  unique_ptr<ForestPredictionCtg> makePredictionCtg(const class Sampler* sampler,
+						    const class Predict* predict,
+						    bool reportAuxiliary = true);
 
 
   /**

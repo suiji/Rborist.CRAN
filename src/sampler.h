@@ -17,7 +17,6 @@
 #define FOREST_SAMPLER_H
 
 #include "idcount.h"
-#include "bv.h"
 #include "typeparam.h"
 #include "sampledobs.h"
 #include "sample.h"
@@ -40,20 +39,15 @@ class Sampler {
   const unique_ptr<struct Response> response;
   
   const vector<vector<class SamplerNux>> samples;
-  const unique_ptr<class BitMatrix> bagMatrix; ///< empty if training or prediction without bagging.
+  unique_ptr<class Predict> predict; // Training, prediction only.
 
-  // Presampling only.
+
+  // Presampling only:
   bool trivial; ///< Shortcut.
   vector<SamplerNux> sbCresc; ///< Crescent block.
   unique_ptr<Sample::Walker<size_t>> walker; ///< Walker table.
   vector<double> weightNoReplace; ///< Non-replacement weights.
   vector<size_t> coeffNoReplace; ///< Uniform non-replacement coefficients.
-
-
-  /**
-     @brief Constructs bag according to encoding.
-   */
-  unique_ptr<BitMatrix> bagRows(bool bagging);
 
 
   /**
@@ -141,7 +135,7 @@ public:
 	  vector<vector<SamplerNux>> samples_,
 	  IndexT nSamp_,
 	  PredictorT nCtg,
-	  bool bagging);
+	  unique_ptr<struct RLEFrame> rleFrame);
 
 
   /**
@@ -150,7 +144,7 @@ public:
   Sampler(const vector<double>& yTrain,
 	  vector<vector<SamplerNux>> samples_,
 	  IndexT nSamp_,
-	  bool bagging);
+	  unique_ptr<struct RLEFrame> rleFrame);
 
 
   /**
@@ -181,7 +175,13 @@ public:
 
     return idCount;
   }
-  
+
+
+  /**
+     @brief Constructs bag according to encoding.
+   */
+  unique_ptr<class BitMatrix> bagRows(bool bagging) const;
+
 
   IndexT getExtent(unsigned int tIdx) const {
     return samples[tIdx].size();
@@ -213,11 +213,6 @@ public:
    */
   size_t getBagCount(unsigned int repIdx) const {
     return samples[repIdx].empty() ? nSamp : samples[repIdx].size();
-  }
-  
-
-  bool isBagging() const {
-    return !bagMatrix->isEmpty();
   }
 
 
@@ -284,20 +279,6 @@ public:
 
 
   /**
-     @brief Determines whether a given forest coordinate is bagged.
-
-     @param tIdx is the tree index.
-
-     @param row is the row index.
-
-     @return true iff bagging and the coordinate bit is set.
-   */
-  inline bool isBagged(unsigned int tIdx, size_t row) const {
-    return !bagMatrix->isEmpty() && bagMatrix->testBit(tIdx, row);
-  }
-
-  
-  /**
      @brief Indicates whether block can be used for enumeration.
 
      @return true iff block is nonempty.
@@ -315,6 +296,17 @@ public:
      @return vector of observation indices, counts.
    */
   vector<IdCount> obsExpand(const vector<SampleNux>& nuxen) const;
+
+
+  /**
+     @brief Pass-through to Predict member functions of the same name.
+   */
+  unique_ptr<struct SummaryReg> predictReg(class Forest* forest,
+					   const vector<double>& yTest) const;
+
+
+  unique_ptr<struct SummaryCtg> predictCtg(class Forest* forest,
+					   const vector<unsigned int>& yTest) const;
 };
 
 #endif

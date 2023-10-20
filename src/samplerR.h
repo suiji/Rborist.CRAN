@@ -183,13 +183,13 @@ struct SamplerR {
 
      @param lDeframe contains the deframed observations.
 
-     @param lArgs is the front-end argument list.
+     @param bagging true iff bagging specified.  EXIT.
 
      @return instantiation suitable for prediction.
    */
   static struct SamplerBridge unwrapPredict(const List& lSampler,
-				     const List& lDeframe,
-				     const List& lArgs);
+					    const List& lDeframe,
+					    bool bagging);
 
 
   /**
@@ -214,11 +214,13 @@ struct SamplerR {
 
 
   static struct SamplerBridge makeBridgeCtg(const List& lSampler,
-				  bool bagging);
+					    const List& lDeframe,
+					    bool generic = false);
 
 
   static struct SamplerBridge makeBridgeNum(const List& lSampler,
-				     bool bagging);
+					    const List& lDeframe,
+					    bool generic = false);
 };
 
 

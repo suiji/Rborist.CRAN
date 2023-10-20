@@ -13,6 +13,10 @@
 #include "frontier.h"
 #include "predictorframe.h"
 #include "booster.h"
+#include "forest.h"
+#include "quant.h"
+#include "rleframe.h"
+#include "bv.h"
 #include "prng.h"
 
 
@@ -69,7 +73,8 @@ Sampler::Sampler(const vector<double>& yTrain,
   nObs(yTrain.size()),
   nSamp(nSamp_),
   response(Response::factoryReg(yTrain)),
-  samples(samples_) {
+  samples(samples_),
+  predict(Predict::makeReg(this, nullptr)) {
   Booster::setEstimate(this);
 }
 
@@ -83,7 +88,8 @@ Sampler::Sampler(const vector<PredictorT>& yTrain,
   nObs(yTrain.size()),
   nSamp(nSamp_),
   response(Response::factoryCtg(yTrain, nCtg, classWeight)),
-  samples(std::move(samples_)) {
+  samples(std::move(samples_)),
+  predict(Predict::makeCtg(this, nullptr)) {
   Booster::setEstimate(this);
 }
 
@@ -91,13 +97,13 @@ Sampler::Sampler(const vector<PredictorT>& yTrain,
 Sampler::Sampler(const vector<double>& yTrain,
 		 vector<vector<SamplerNux>> samples_,
 		 IndexT nSamp_,
-		 bool bagging) :
+		 unique_ptr<RLEFrame> rleFrame) :
   nRep(samples_.size()),
   nObs(yTrain.size()),
   nSamp(nSamp_),
   response(Response::factoryReg(yTrain)),
   samples(std::move(samples_)),
-  bagMatrix(bagRows(bagging)) {
+  predict(Predict::makeReg(this, std::move(rleFrame))) {
 }
 
 
@@ -105,29 +111,29 @@ Sampler::Sampler(const vector<PredictorT>& yTrain,
 		 vector<vector<SamplerNux>> samples_,
 		 IndexT nSamp_,
 		 PredictorT nCtg,
-		 bool bagging) :
+		 unique_ptr<RLEFrame> rleFrame) :
   nRep(samples_.size()),
   nObs(yTrain.size()),
   nSamp(nSamp_),
   response(Response::factoryCtg(yTrain, nCtg)),
   samples(std::move(samples_)),
-  bagMatrix(bagRows(bagging)) {
+  predict(Predict::makeCtg(this, std::move(rleFrame))) {
 }
 
 
 Sampler::~Sampler() = default;
 
 
-unique_ptr<BitMatrix> Sampler::bagRows(bool bagging) {
+unique_ptr<BitMatrix> Sampler::bagRows(bool bagging) const {
   if (!bagging)
     return make_unique<BitMatrix>(0, 0);
 
   unique_ptr<BitMatrix> matrix = make_unique<BitMatrix>(nRep, nObs);
   for (unsigned int tIdx = 0; tIdx < nRep; tIdx++) {
-    IndexT row = 0;
+    IndexT obsIdx = 0;
     for (IndexT sIdx = 0; sIdx != getBagCount(tIdx); sIdx++) {
-      row += getDelRow(tIdx, sIdx);
-      matrix->setBit(tIdx, row);
+      obsIdx += getDelRow(tIdx, sIdx);
+      matrix->setBit(tIdx, obsIdx);
     }
   }
   return matrix;
@@ -241,6 +247,19 @@ vector<size_t> Sampler::binIndices(size_t nObs,
 CtgT Sampler::getNCtg() const {
   return response->getNCtg();
 }
+
+
+unique_ptr<SummaryReg> Sampler::predictReg(Forest* forest,
+					   const vector<double>& yTest) const {
+  return predict->predictReg(this, forest, yTest);
+}
+
+
+unique_ptr<SummaryCtg> Sampler::predictCtg(Forest* forest,
+					   const vector<unsigned int>& yTest) const {
+  return predict->predictCtg(this, forest, yTest);
+}
+
 
 
 # ifdef restore

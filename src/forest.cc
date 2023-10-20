@@ -14,43 +14,53 @@
  */
 
 
-#include "bv.h"
+#include "dectree.h"
 #include "forest.h"
-#include "forestscorer.h"
+#include "predictframe.h"
+#include "sampler.h"
 #include "ompthread.h"
+
+// Inclusion only:
 #include "quant.h"
 
-Forest::Forest(vector<vector<DecNode>> decNode_,
-	       vector<vector<double>> scores_,
-	       vector<unique_ptr<BV>> factorBits_,
-	       vector<unique_ptr<BV>> bitsObserved_,
-	       const tuple<double, double, string>& scoreDesc_) :
-  nTree(decNode_.size()),
-  decNode(std::move(decNode_)),
-  scores(std::move(scores_)),
-  factorBits(std::move(factorBits_)),
-  bitsObserved(std::move(bitsObserved_)),
-  scoreDesc(ScoreDesc(scoreDesc_)) {
+Forest::Forest(vector<DecTree>&& decTree_,
+	       const tuple<double, double, string>& scoreDesc_,
+	       Leaf&& leaf_) :
+  decTree(decTree_),
+  scoreDesc(ScoreDesc(scoreDesc_)),
+  leaf(leaf_),
+  noNode(maxHeight(decTree)),
+  nTree(decTree.size()) {
 }
 
 
-vector<size_t> Forest::produceHeight(const vector<size_t>& extents) const {
-  vector<size_t> heights(nTree);
-  size_t heightAccum = 0;
-  for (unsigned int tIdx = 0; tIdx < nTree; tIdx++) {
-    heightAccum += extents[tIdx];
-    heights[tIdx] = heightAccum;
+size_t Forest::maxHeight(const vector<DecTree>& decTree) {
+  size_t height = 0;
+  for (const DecTree& tree : decTree) {
+    height = max(height, tree.nodeCount());
   }
-  return heights;
+  return height;
 }
 
 
-size_t Forest::noNode() const {
-  size_t maxHeight = 0;
-  for (unsigned int tIdx = 0; tIdx < decNode.size(); tIdx++) {
-    maxHeight = max(maxHeight, decNode[tIdx].size());
-  }
-  return maxHeight;
+unique_ptr<ForestPredictionReg> Forest::makePredictionReg(const Sampler* sampler,
+							  const class Predict* predict,
+							  bool reportAuxiliary) {
+  return scoreDesc.makePredictionReg(predict, sampler, reportAuxiliary);
+}
+						   
+
+unique_ptr<ForestPredictionCtg> Forest::makePredictionCtg(const Sampler* sampler,
+							  const class Predict* predict,
+							  bool reportAuxiliary) {
+  return scoreDesc.makePredictionCtg(predict, sampler, reportAuxiliary);
+}
+						   
+
+// Should happen either internally or at construction.
+void Forest::initWalkers(const PredictFrame& trFrame) {
+  for (DecTree& tree : decTree)
+    tree.setObsWalker(trFrame.getNPredNum());
 }
 
 
@@ -63,33 +73,18 @@ void Forest::dump(vector<vector<PredictorT> >& predTree,
 }
 
 
-unique_ptr<ForestScorer> Forest::makeScorer(const ResponseReg* response,
-					    const Forest* forest,
-					    const Leaf* leaf,
-					    const PredictReg* predict,
-					    vector<double> quantile) const {
-  return scoreDesc.makeScorer(response, forest, leaf, predict, std::move(quantile));
-}
-
-
-unique_ptr<ForestScorer> Forest::makeScorer(const ResponseCtg* response,
-					    size_t nObs,
-					    bool doProb) const {
-  return scoreDesc.makeScorer(response, nObs, doProb);
-}
-
-
 void Forest::dump(vector<vector<PredictorT> >& pred,
                   vector<vector<double> >& split,
                   vector<vector<size_t> >& delIdx,
 		  vector<vector<double>>& score) const {
-  for (unsigned int tIdx = 0; tIdx < decNode.size(); tIdx++) {
-    for (IndexT nodeIdx = 0; nodeIdx < decNode[tIdx].size(); nodeIdx++) {
-      pred[tIdx].push_back(decNode[tIdx][nodeIdx].getPredIdx());
-      delIdx[tIdx].push_back(decNode[tIdx][nodeIdx].getDelIdx());
-      score[tIdx].push_back(scores[tIdx][nodeIdx]);
+  for (unsigned int tIdx = 0; tIdx < nTree; tIdx++) {
+    const DecTree& tree = decTree[tIdx];
+    for (IndexT nodeIdx = 0; nodeIdx < tree.nodeCount(); nodeIdx++) {
+      pred[tIdx].push_back(tree.getPredIdx(nodeIdx));
+      delIdx[tIdx].push_back(tree.getDelIdx(nodeIdx));
+      score[tIdx].push_back(tree.getScore(nodeIdx));
       // N.B.:  split field must fit within a double.
-      split[tIdx].push_back(decNode[tIdx][nodeIdx].getSplitNum());
+      split[tIdx].push_back(tree.getSplitNum(nodeIdx));
     }
   }
 }
@@ -99,7 +94,7 @@ vector<IndexT> Forest::getLeafNodes(unsigned int tIdx,
 				    IndexT extent) const {
   vector<IndexT> leafIndices(extent);
   IndexT nodeIdx = 0;
-  for (auto node : decNode[tIdx]) {
+  for (auto node : decTree[tIdx].getNode()) {
     IndexT leafIdx;
     if (node.getLeafIdx(leafIdx)) {
       leafIndices[leafIdx] = nodeIdx;
@@ -118,7 +113,7 @@ vector<vector<IndexRange>> Forest::leafDominators() const {
   {
 #pragma omp for schedule(dynamic, 1)
   for (unsigned int tIdx = 0; tIdx < nTree; tIdx++) {
-    leafDom[tIdx] = leafDominators(decNode[tIdx]);
+    leafDom[tIdx] = leafDominators(decTree[tIdx].getNode());
   }
   }
   return leafDom;
