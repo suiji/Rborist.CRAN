@@ -26,6 +26,10 @@
 #include <vector>
 #include <complex>
 
+class Sampler;
+class Predict;
+class PredictFrame;
+
 /**
    @brief The decision forest as a read-only collection.
 */
@@ -65,19 +69,14 @@ class Forest {
 	 Leaf&& leaf_);
 
 
-  /**
-     @brief Initializes walker state.  Ultimately deprecated.
-   */
-  void initWalkers(const class PredictFrame& trFrame);
-
-
-  IndexT walkObs(const class PredictFrame& frame,
+  IndexT walkObs(const PredictFrame* frame,
+		 bool trapUnobserved,
 		 size_t obsIdx,
 		 unsigned int tIdx) const {
-    return decTree[tIdx].walkObs(frame, obsIdx);
+    return decTree[tIdx].walkObs(frame, trapUnobserved, obsIdx);
   }
 
-  
+
   /**
      @brief Maps leaf indices to the node at which they appear.
    */
@@ -90,7 +89,7 @@ class Forest {
      
      @return number of trees in the forest.
    */
-  inline unsigned int getNTree() const {
+  unsigned int getNTree() const {
     return nTree;
   }
 
@@ -144,13 +143,13 @@ class Forest {
   static size_t maxHeight(const vector<DecTree>& decTree);
 
 
-  unique_ptr<ForestPredictionReg> makePredictionReg(const class Sampler* sampler,
-						    const class Predict* predict,
+  unique_ptr<ForestPredictionReg> makePredictionReg(const Sampler* sampler,
+						    const Predict* predict,
 						    bool reportAuxiliary = true);
 
 
-  unique_ptr<ForestPredictionCtg> makePredictionCtg(const class Sampler* sampler,
-						    const class Predict* predict,
+  unique_ptr<ForestPredictionCtg> makePredictionCtg(const Sampler* sampler,
+						    const Predict* predict,
 						    bool reportAuxiliary = true);
 
 
@@ -170,8 +169,8 @@ class Forest {
   void dump(vector<vector<PredictorT> > &predTree,
             vector<vector<double> > &splitTree,
             vector<vector<size_t> > &lhDelTree,
-	    vector<vector<double>>& scoreTree,
-	    IndexT& dummy) const;
+	    vector<vector<unsigned char>>& facSplitTree,
+	    vector<vector<double>>& scoreTree) const;
 };
 
 

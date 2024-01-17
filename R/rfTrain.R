@@ -1,4 +1,4 @@
-# Copyright (C)  2012-2023   Mark Seligman
+# Copyright (C)  2012-2024   Mark Seligman
 ##
 ## This file is part of Rborist.
 ##
@@ -53,15 +53,21 @@ rfTrain.default <- function(preFormat, sampler, y,
     if (maxLeaf > sampler$nSamp)
         warning("Specified leaf maximum exceeds number of samples.")
 
-    if (nThread < 0)
-        stop("Thread count must be nonnegative")
-    if (nLevel < 0)
-        stop("Level count must be nonnegative")
+    if (nThread < 0) {
+        warning("Thread count must be nonnegative:  ignoring.")
+        nThread <- 0
+    }
+    if (nLevel < 0) {
+        warning("Level count must be nonnegative:  ignoring.")
+        nLevel <- 0
+    }
     
   # Argument checking:
 
-    if (autoCompress < 0.0 || autoCompress > 1.0)
-        stop("Autocompression plurality must be a percentage.")
+    if (autoCompress < 0.0 || autoCompress > 1.0) {
+        warning("Autocompression plurality must be a percentage:  ignorning.")
+        autoCompress <- 0.25
+    }
     
     nPred <- length(preFormat$signature$predForm)
     if (is.null(regMono)) {
@@ -103,17 +109,20 @@ rfTrain.default <- function(preFormat, sampler, y,
                 classWeight <- rep(0.0, nCtg)
             }
             else {
-                stop("Unrecognized class weights")
+                warning("Unrecognized class weight format:  ignoring")
+                classWeight <- rep(1.0, nCtg)
             }
         }
         else {
             classWeight <- rep(1.0, nCtg)
         }
     }
-    else if (!is.null(classWeight)) {
-        stop("class weights only defined for classification")
+    else {
+        if (!is.null(classWeight)) {
+            warning("Class weights only defined for classification:  ignoring")
+        }
+        classWeight <- rep(1.0, 0)
     }
-  
 
   # Predictor weight constraints
     if (is.null(predWeight)) {
@@ -170,6 +179,7 @@ rfTrain.default <- function(preFormat, sampler, y,
 
     argTrain$predFixed <- predFixed
     argTrain$classWeight <- classWeight
+    argTrain$obsWeight <- numeric(0)
     argTrain$splitQuant <- splitQuant
     argTrain$regMono <- regMono
     argTrain$enableCoproc <- FALSE

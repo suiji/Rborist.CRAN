@@ -12,8 +12,6 @@
 
    @author Mark Seligman
  */
-
-
 #include "treenode.h"
 #include "predictframe.h"
 #include "predictorframe.h"
@@ -22,7 +20,6 @@
 
 unsigned int TreeNode::rightBits = 0;
 PredictorT TreeNode::rightMask = 0;
-bool TreeNode::trapUnobserved = false;
 
 
 void TreeNode::initMasks(PredictorT nPred) {
@@ -32,23 +29,19 @@ void TreeNode::initMasks(PredictorT nPred) {
 }
 
 
-void TreeNode::initTrap(bool doTrap) {
-  trapUnobserved = doTrap;
-}
-
-
 void TreeNode::deInit() {
   rightBits = 0;
   rightMask = 0ull;
-  trapUnobserved = false;
 }
 
 
-bool TreeNode::trapAndBail() {
-  return trapUnobserved;
+TreeNode::TreeNode(complex<double> pair) :
+  packed(abs(pair.real())),
+  criterion(pair.imag()),
+  invert(pair.real() < 0.0) {
 }
 
-
+  
 void TreeNode::critCut(const SplitNux& nux,
 		       const class SplitFrontier* splitFrontier) {
   setPredIdx(nux.getPredIdx());
@@ -67,38 +60,5 @@ void TreeNode::setQuantRank(const PredictorFrame* frame) {
   PredictorT predIdx = getPredIdx();
   if (isNonterminal() && !frame->isFactor(predIdx)) {
     criterion.setQuantRank(frame, predIdx);
-  }
-}
-
-
-IndexT TreeNode::advanceMixed(const PredictFrame& frame,
-			      const vector<BV>& factorBits,
-			      const vector<BV>& bitsObserved,
-			      const CtgT* rowFT,
-			      const double* rowNT,
-			      unsigned int tIdx) const {
-  bool isFactor;
-  IndexT blockIdx = frame.getIdx(getPredIdx(), isFactor);
-  if (isFactor) {
-    return advanceFactor(factorBits[tIdx], bitsObserved[tIdx], getBitOffset() + rowFT[blockIdx]);
-  }
-  else {
-    return advanceNum(rowNT[blockIdx]);
-  }
-} // EXIT
-
-
-IndexT TreeNode::advanceMixed(const PredictFrame& frame,
-			      const BV& factorBits,
-			      const BV& bitsObserved,
-			      const CtgT* rowFT,
-			      const double* rowNT) const {
-  bool isFactor;
-  IndexT blockIdx = frame.getIdx(getPredIdx(), isFactor);
-  if (isFactor) {
-    return advanceFactor(factorBits, bitsObserved, getBitOffset() + rowFT[blockIdx]);
-  }
-  else {
-    return advanceNum(rowNT[blockIdx]);
   }
 }

@@ -1,4 +1,4 @@
-// Copyright (C)  2019 - 2023   Mark Seligman
+// Copyright (C)  2019 - 2024   Mark Seligman
 //
 // This file is part of RboristBase.
 //
@@ -30,14 +30,13 @@
 
    @return RboristDump as List.
  */
-RcppExport SEXP Dump(SEXP sArbOut) {
-  BEGIN_RCPP
 
+// [[Rcpp::export]]
+RcppExport SEXP Dump(SEXP sArbOut) {
   DumpRf dumper(sArbOut);
   dumper.dumpTree();
 
   return StringVector(dumper.outStr.str());
-  END_RCPP
 }
 
 

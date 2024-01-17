@@ -22,6 +22,9 @@
 
 using namespace std;
 
+class Sampler;
+class Predict;
+
 /**
    @brief Hides class Sampler internals from bridge via forward declarations.
  */
@@ -34,7 +37,9 @@ struct SamplerBridge {
 		size_t nSamp,
 		unsigned int nTree,
 		bool replace,
-		const double weight[]);
+		const vector<double>& weight,
+		size_t nHoldout,
+		const vector<size_t>& undefined);
 
 
   SamplerBridge(SamplerBridge&& sb);
@@ -47,10 +52,9 @@ struct SamplerBridge {
 		size_t nSamp,
 		unsigned int nTree,
 		const double samples[],
-		unsigned int nCtg,
-		const vector<double>& classWeight);
+		unsigned int nCtg);
 
-
+  
   /**
      @brief Training constuctor:  regression.
    */
@@ -98,7 +102,11 @@ struct SamplerBridge {
 
      @return core sampler.
     */
-  class Sampler* getSampler() const;
+  Sampler* getSampler() const;
+
+
+  Predict* getPredict() const;
+  
 
   /**
      @brief Getter for number of training rows.
@@ -141,7 +149,7 @@ struct SamplerBridge {
   
 private:
 
-  unique_ptr<class Sampler> sampler; // Core-level instantiation.
+  unique_ptr<Sampler> sampler; // Core-level instantiation.
 };
 
 

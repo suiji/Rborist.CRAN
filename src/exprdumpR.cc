@@ -1,4 +1,4 @@
-// Copyright (C)  2019 - 2023   Mark Seligman and Decision Patterns LLC.
+// Copyright (C)  2019 - 2024   Mark Seligman and Decision Patterns LLC.
 //
 // This file is part of RboristBase.
 //
@@ -28,20 +28,11 @@
 #include "exprdumpR.h"
 
 
-/**
-   @brief Structures forest summary for analysis by Dump package.
-
-   @param sForest is the Forest summary.
-
-   @return RboristDump as List.
- */
+// [[Rcpp::export]]
 RcppExport SEXP exprdump(SEXP sArbOut) {
-  BEGIN_RCPP
 
   ExprDump dumper(sArbOut);
   return dumper.exprTree();
-
-  END_RCPP
 }
 
 

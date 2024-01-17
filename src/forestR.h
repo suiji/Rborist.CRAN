@@ -1,4 +1,4 @@
-// Copyright (C)  2012-2023  Mark Seligman
+// Copyright (C)  2012-2024  Mark Seligman
 //
 // This file is part of RboristBase.
 //
@@ -35,6 +35,7 @@ using namespace Rcpp;
 #include <vector>
 using namespace std;
 
+struct SamplerBridge;
 
 /**
    @brief Front-end access to ForestBridge.
@@ -66,7 +67,7 @@ struct ForestR {
      @brief Prediction unwrapper.
    */
   static struct ForestBridge unwrap(const List& sTrain,
-				    const struct SamplerBridge& samplerBridge);
+				    const SamplerBridge& samplerBridge);
 
 
   /**

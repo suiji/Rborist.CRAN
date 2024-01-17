@@ -22,6 +22,7 @@
 
 using namespace std;
 
+class PredictorFrame;
 
 struct TrainBridge {
   TrainBridge(unique_ptr<struct RLEFrame> rleFrame,
@@ -33,7 +34,7 @@ struct TrainBridge {
   ~TrainBridge();
 
 
-  const struct PredictorFrame* getFrame() const {
+  const PredictorFrame* getFrame() const {
     return frame.get();
   }
 
@@ -71,12 +72,27 @@ struct TrainBridge {
   static void initTree(size_t leafMax);
 
 
+  static void initSamples(vector<double> obsWeight);
+
+  
+  static void initCtg(vector<double> classWeight);
+
+  
   /**
-     @brief Sets learning rate for sequential training.
+     @brief Sets loss and scoring for independent forest.
+   */
+  static void initBooster(const string& loss,
+			  const string& scorer);
+
+  
+  /**
+     @brief Sets update for sequential forest,
    */
   static void initBooster(const string& loss,
 			  const string& scorer,
-			  double nu = 0.0);
+			  double nu,
+			  bool trackFit,
+			  unsigned int stopLag);
 
 
   /**
@@ -129,7 +145,7 @@ struct TrainBridge {
   static void deInit();
 
 private:
-  unique_ptr<class PredictorFrame> frame;
+  unique_ptr<PredictorFrame> frame;
 };
 
 #endif

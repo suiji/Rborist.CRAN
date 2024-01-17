@@ -17,7 +17,6 @@
 #include "predictbridge.h"
 #include "forestbridge.h"
 #include "sampler.h"
-#include "samplerrw.h"
 #include "rleframe.h"
 
 #include <memory>
@@ -41,11 +40,13 @@ unsigned int SamplerBridge::getNRep() const {
 
 SamplerBridge::SamplerBridge(size_t nSamp,
 			     size_t nObs,
-			     unsigned int nTree,
+			     unsigned int nRep,
 			     bool replace,
-			     const double weight[]) {
+			     const vector<double>& weight,
+			     size_t nHoldout,
+			     const vector<size_t>& undefined) {
   SamplerNux::setMasks(nObs);
-  sampler = make_unique<Sampler>(nSamp, nObs, nTree, replace, weight);
+  sampler = make_unique<Sampler>(nSamp, nObs, nRep, replace, weight, nHoldout, undefined);
 }
 
 
@@ -54,7 +55,7 @@ SamplerBridge::SamplerBridge(vector<double> yTrain,
 			     unsigned int nTree,
 			     const double samples[]) {
   SamplerNux::setMasks(yTrain.size());
-  vector<vector<SamplerNux>> nux = SamplerRW::unpack(samples, nSamp, nTree);
+  vector<vector<SamplerNux>> nux = SamplerNux::unpack(samples, nSamp, nTree);
   sampler = make_unique<Sampler>(yTrain, nSamp, std::move(nux));
 }
 
@@ -65,7 +66,7 @@ SamplerBridge::SamplerBridge(vector<double> yTrain,
 			     const double samples[],
 			     unique_ptr<RLEFrame> rleFrame) {
   SamplerNux::setMasks(yTrain.size());
-  vector<vector<SamplerNux>> nux = SamplerRW::unpack(samples, nSamp, nTree);
+  vector<vector<SamplerNux>> nux = SamplerNux::unpack(samples, nSamp, nTree);
   sampler = make_unique<Sampler>(yTrain, std::move(nux), nSamp, std::move(rleFrame));
 }
 
@@ -74,11 +75,10 @@ SamplerBridge::SamplerBridge(vector<unsigned int> yTrain,
 			     size_t nSamp,
 			     unsigned int nTree,
 			     const double samples[],
-			     unsigned int nCtg,
-			     const vector<double>& classWeight) {
+			     unsigned int nCtg) {
   SamplerNux::setMasks(yTrain.size());
-  vector<vector<SamplerNux>> nux = SamplerRW::unpack(samples, nSamp, nTree, nCtg);
-  sampler = make_unique<Sampler>(yTrain, nSamp, std::move(nux), nCtg, classWeight);
+  vector<vector<SamplerNux>> nux = SamplerNux::unpack(samples, nSamp, nTree, nCtg);
+  sampler = make_unique<Sampler>(yTrain, nSamp, std::move(nux), nCtg);
 }
 
 
@@ -89,7 +89,7 @@ SamplerBridge::SamplerBridge(vector<unsigned int> yTrain,
 			     const double samples[],
 			     unique_ptr<RLEFrame> rleFrame) {
   SamplerNux::setMasks(yTrain.size());
-  vector<vector<SamplerNux>> nux = SamplerRW::unpack(samples, nSamp, nTree, nCtg);
+  vector<vector<SamplerNux>> nux = SamplerNux::unpack(samples, nSamp, nTree, nCtg);
   sampler = make_unique<Sampler>(yTrain, std::move(nux), nSamp, nCtg, std::move(rleFrame));
 }
 
@@ -99,7 +99,7 @@ SamplerBridge::SamplerBridge(size_t nObs,
 			     size_t nSamp,
 			     unsigned int nTree) {
   SamplerNux::setMasks(nObs);
-  sampler = make_unique<Sampler>(nObs, nSamp, SamplerRW::unpack(samples, nSamp, nTree));
+  sampler = make_unique<Sampler>(nObs, nSamp, SamplerNux::unpack(samples, nSamp, nTree));
 }
 
 
@@ -118,6 +118,11 @@ void SamplerBridge::sample() {
 
 Sampler* SamplerBridge::getSampler() const {
   return sampler.get();
+}
+
+
+Predict* SamplerBridge::getPredict() const {
+  return sampler->getPredict();
 }
 
 

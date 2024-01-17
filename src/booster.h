@@ -25,12 +25,15 @@
 #include <algorithm>
 #include <vector>
 
+struct Response;
+
 /**
    @brief Maintains boosted estimate.
  */
 struct Booster {
   static unique_ptr<Booster> booster; ///< Singleton.
-
+  static bool trackFit; ///< Whether to track the fit at each epoch.
+  static unsigned int stopLag; ///< # steps beyond minimum to exit.
   ScoreDesc scoreDesc; ///< Completes and hands back to trainer.
   vector<double> estimate; ///< Accumulated estimate.
 
@@ -38,15 +41,15 @@ struct Booster {
   vector<SampleNux> baseSamples; ///< Cached bagged samples.
 
 
-  Booster(double (Booster::*)(const class Response*) const,
+  Booster(double (Booster::*)(const Response*) const,
 	  void (Booster::*)(struct NodeScorer*, class SampledObs*, double&),
 	  double nu_);
 
   
-  double (Booster::* baseScorer)(const class Response*) const;
+  double (Booster::* baseScorer)(const Response*) const;
 
 
-  void setBaseScore(const class Response* response) const {
+  void setBaseScore(const Response* response) const {
     (this->*baseScorer)(response);
   }
 
@@ -98,10 +101,21 @@ struct Booster {
 
   static void init(const string& loss,
 		   const string& scorer,
-		   double nu);
+		   double nu = 0.0);
+
+
+  /**
+     @brief As above, but also sets fitting parameters.
+   */
+  static void init(const string& loss,
+		   const string& scorer,
+		   double nu,
+		   bool trackFit,
+		   unsigned int stopLag);
 
 
   static void deInit();
+
 
   /**
      @return true iff a positive learning rate has been specified.
@@ -124,7 +138,7 @@ struct Booster {
 		    const struct SampleMap& sampleMap);
 
 
-  double zero(const class Response* response) const;
+  double zero(const Response* response) const;
 
 
   void noUpdate(struct NodeScorer* nodeScorer,
@@ -142,10 +156,10 @@ struct Booster {
 		     double& bagSum);
 
 
-  double mean(const class Response* response) const;
+  double mean(const Response* response) const;
   
 
-  double logit(const class Response* response) const;
+  double logit(const Response* response) const;
 
 
   /**

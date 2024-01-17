@@ -1,4 +1,4 @@
-// Copyright (C)  2012-2023   Mark Seligman
+// Copyright (C)  2012-2024   Mark Seligman
 //
 // This file is part of RboristBase.
 //
@@ -36,7 +36,9 @@ RcppExport SEXP rootSample(const SEXP sY,
 			   const SEXP sRowWeight,
 			   const SEXP sNSamp,
 			   const SEXP sNTree,
-			   const SEXP sWithRepl);
+			   const SEXP sWithRepl,
+			   const SEXP sNHoldout,
+			   const SEXP sUndefined);
 
 
 /**
@@ -56,7 +58,9 @@ struct SamplerR {
 			 const SEXP sNSamp,
 			 const SEXP sNTree,
 			 const SEXP sWithRepl,
-			 const NumericVector& weight);
+			 const vector<double>& weight,
+			 const SEXP sNHoldout,
+			 const vector<size_t>& undefined);
 
 
   /**
@@ -77,9 +81,9 @@ struct SamplerR {
 
   
   /**
-     @brief Invokes bridge sampler per tree.
+     @brief Invokes bridge sampler per rep.
    */
-  static void sampleTrees(struct SamplerBridge& bridge);
+  static void sampleRepeatedly(struct SamplerBridge& bridge);
 
 
   /**
@@ -107,23 +111,6 @@ struct SamplerR {
 
   static IntegerVector sampleNoReplace(NumericVector& weight,
 				       size_t nSamp);
-
-
-  /**
-      @brief Class weighting.
-
-      Class weighting constructs a proxy response based on category
-      frequency.  In the absence of class weighting, proxy values are
-      identical for all clasess.  The technique of class weighting is
-      not without controversy.
-
-      @param classWeight are user-suppled weightings of the categories.
-
-      @return core-ready vector of scaled class weights.
-   */
-  static vector<double> ctgWeight(const IntegerVector& yTrain,
-				  const NumericVector& classWeight);
-
 
   /**
      @brief Bundles trained bag into format suitable for R.
@@ -159,8 +146,8 @@ struct SamplerR {
 
      @param lDeframe summarizes the predictors.
    */
-  static SEXP checkOOB(const List& lSampler,
-                       const List& lDeframe);
+  static void checkOOB(const List& lSampler,
+		       const List& lDeframe);
   
 
   /**
@@ -168,12 +155,9 @@ struct SamplerR {
 
      @param lSampler contains the R sampler summary.
 
-     @param lArgs is the argument list, contains sample-weighting values.
-
      @param return instantiation suitable for training.
    */
-  static struct SamplerBridge unwrapTrain(const List& lSampler,
-				   const List& lArgs);
+  static struct SamplerBridge unwrapTrain(const List& lSampler);
 
 
   /**
@@ -205,8 +189,7 @@ struct SamplerR {
 
 
   static struct SamplerBridge makeBridgeTrain(const List& lSampler,
-				       const IntegerVector& yTrain,
-				       const List& argList);
+					      const IntegerVector& yTrain);
 
 
   static struct SamplerBridge makeBridgeTrain(const List& lSampler,

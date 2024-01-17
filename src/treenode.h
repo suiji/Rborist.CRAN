@@ -6,9 +6,9 @@
  */
 
 /**
-   @file cartnode.h
+   @file treenode.h
 
-   @brief Data structures and methods implementing CART tree nodes.
+   @brief Data structures and methods implementing tree nodes.
 
    @author Mark Seligman
  */
@@ -17,13 +17,12 @@
 #ifndef FOREST_TREENODE_H
 #define FOREST_TREENODE_H
 
+#include "typeparam.h"
 #include "crit.h"
 #include "bv.h"
 
 #include <vector>
 #include <complex>
-
-
 
 /**
    @brief To replace parallel array access.
@@ -36,9 +35,6 @@ class TreeNode {
   // Initialized from predictor frame or signature:
   static unsigned int rightBits;
   static PredictorT rightMask;
-
-  // Intialized by prediction command:
-  static bool trapUnobserved;
 
   PackedT packed;
 
@@ -54,17 +50,11 @@ public:
   static void initMasks(PredictorT nPred);
 
 
-  static void initTrap(bool doTrap);
-
-  
   /**
      @brief Resets packing values to default.
    */
   static void deInit();
 
-
-  static bool trapAndBail();
-  
 
   /**
      @brief Nodes must be explicitly set to non-terminal (delIdx != 0).
@@ -78,19 +68,15 @@ public:
   /**
      @brief Constructor for reading complex-encoded nodes.
    */
-  TreeNode(complex<double> pair) :
-    packed(abs(pair.real())),
-    criterion(pair.imag()),
-    invert(pair.real() < 0.0) {
-  }
+  TreeNode(complex<double> pair);
 
-  
+
   /**
      @brief Encodes node contents as complex value.
 
      @param[out] valOut outputs the complex encoding.
    */
-  inline void dump(complex<double>& valOut) const {
+  void dump(complex<double>& valOut) const {
     valOut = complex<double>(invert ? -double(packed) : packed, criterion.getVal());
   }
 
@@ -98,12 +84,12 @@ public:
   /**
      @brief Sets the invert field to the specified (randomized) sense.
    */
-  inline void setInvert(bool invert) {
+  void setInvert(bool invert) {
     this->invert = invert;
   }
 
 
-  inline void setPredIdx(PredictorT predIdx) {
+  void setPredIdx(PredictorT predIdx) {
     packed |= predIdx;
   }
   
@@ -113,7 +99,7 @@ public:
 
      @return splitting predictor index.
    */
-  inline PredictorT getPredIdx() const {
+  PredictorT getPredIdx() const {
     return packed & rightMask;
   }
 
@@ -121,12 +107,12 @@ public:
   /**
      @brief Initializes delIdx value; not for resetting.
    */
-  inline void setDelIdx(IndexT delIdx) {
+  void setDelIdx(IndexT delIdx) {
     packed |= (size_t(delIdx) << rightBits);
   }
   
 
-  inline void resetDelIdx(IndexT delIdx) {
+  void resetDelIdx(IndexT delIdx) {
     packed = getPredIdx();
     packed |= (size_t(delIdx) << rightBits);
   }
@@ -137,7 +123,7 @@ public:
 
      @return delIdx value.
    */
-  inline IndexT getDelIdx() const {
+  IndexT getDelIdx() const {
     return packed >> rightBits;
   }
 
@@ -147,12 +133,12 @@ public:
 
      @return True iff delIdx value is nonzero.
    */
-  inline bool isNonterminal() const {
+  bool isNonterminal() const {
     return getDelIdx() != 0;
   }  
 
 
-  inline bool isTerminal() const {
+  bool isTerminal() const {
     return getDelIdx() == 0;
   }
 
@@ -186,7 +172,7 @@ public:
 
      @return splitting value.
    */
-  inline auto getSplitNum() const {
+  auto getSplitNum() const {
     return criterion.getNumVal();
   }
 
@@ -194,7 +180,7 @@ public:
   /**
      @return first bit position of split.
    */
-  inline auto getBitOffset() const {
+  auto getBitOffset() const {
     return criterion.getBitOffset();
   }
 
@@ -208,8 +194,16 @@ public:
 
      @return delta to next node, if nonterminal, else zero.
    */
-  inline IndexT advanceNum(const double numVal) const {
-    if (trapUnobserved && isnan(numVal))
+  IndexT advanceNum(const double numVal) const {
+    return delInvert(invert ? (numVal > getSplitNum()) : (numVal <= getSplitNum()));
+  }
+
+
+  /**
+     @brief As above, but traps NaN (unobserved) frame values.
+   */
+  IndexT advanceNumTrap(const double numVal) const {
+    if (isnan(numVal))
       return 0;
     else
       return delInvert(invert ? (numVal > getSplitNum()) : (numVal <= getSplitNum()));
@@ -224,72 +218,24 @@ public:
 
      @return delta to branch target.
    */
-  inline IndexT advanceFactor(const BV& bits,
-			      const BV& bitsObserved,
-			      size_t bitOffset) const {
-    if (trapUnobserved && !bitsObserved.testBit(bitOffset))
+  IndexT advanceFactor(const BV& bits,
+		       size_t bitOffset) const {
+    return delTest(bits.testBit(bitOffset));
+  }
+
+
+  /**
+     @brief As above, but traps on unobserved bits.
+   */
+  IndexT advanceFactorTrap(const BV& bits,
+			   const BV& bitsObserved,
+			   size_t bitOffset) const {
+    if (!bitsObserved.testBit(bitOffset))
       return 0;
     else
       return delTest(bits.testBit(bitOffset));
   }
-  
 
-  /**
-     @brief Node advancer for all-factor observations.
-
-     Splitting for factor values is a set-membership relation.  Randomization
-     is implemented at training, making it unnecessary to read the inversion
-     sense.
-
-     @param rowT holds the transposed factor-valued observations.
-
-     @param tIdx is the tree index.
-
-     @param leafIdx as above.
-
-     @return terminal/nonterminal : 0 / delta to next node.
-   */
-  IndexT advanceFactor(const vector<BV>& factorBits,
-		       const vector<BV>& bitsObserved,
-		       const CtgT rowFT[],
-		       unsigned int tIdx) const {
-    return advanceFactor(factorBits[tIdx], bitsObserved[tIdx], getBitOffset() + rowFT[getPredIdx()]);
-  } // EXIT
-
-
-  IndexT advanceFactor(const BV& factorBits,
-		       const BV& bitsObserved,
-		       const CtgT rowFT[]) const {
-    return advanceFactor(factorBits, bitsObserved, getBitOffset() + rowFT[getPredIdx()]);
-  }
-
-
-  /**
-     @brief Node advancer, as above, but for mixed observation.
-
-     Splitting for factor values is a set-membership relation.  Randomization
-     is implemented at training, making it unnecessary to read the inversion
-     sense.
-
-     Parameters as above, along with:
-
-     @param rowNT contains the transponsed numerical observations.
-
-     @return terminal/nonterminal : 0 / delta to next node.
-   */
-  IndexT advanceMixed(const class PredictFrame& frame,
-		      const vector<class BV>& factorBits,
-		      const vector<class BV>& bitsObserved,
-		      const CtgT* rowFT,
-		      const double *rowNT,
-		      unsigned int tIdx) const; // EXIT
-
-
-  IndexT advanceMixed(const class PredictFrame& frame,
-		      const class BV& factorBits,
-		      const class BV& bitsObserved,
-		      const CtgT* rowFT,
-		      const double *rowNT) const;
 
   /**
      @brief Interplates split values from fractional intermediate rank.
@@ -299,7 +245,7 @@ public:
   void setQuantRank(const class PredictorFrame* frame);
 
   
-  inline bool getLeafIdx(IndexT& leafIdx) const {
+  bool getLeafIdx(IndexT& leafIdx) const {
     IndexT delIdx = getDelIdx();
     if (delIdx == 0) {
       leafIdx = criterion.getLeafIdx();
@@ -311,7 +257,7 @@ public:
   /**
      @brief As above, but assumes node is noterminal.
    */
-  inline IndexT getLeafIdx() const {
+  IndexT getLeafIdx() const {
     return criterion.getLeafIdx();
   }
   
@@ -319,7 +265,7 @@ public:
   /**
      @brief Resets delIdx to terminal, preserving remaining state.
    */
-  inline void resetTerminal() {
+  void resetTerminal() {
     resetDelIdx(0);
   }
   
@@ -329,7 +275,7 @@ public:
 
      @param leafIdx is the tree-relative leaf index, if tracked.
    */
-  inline void setLeaf(IndexT leafIdx) {
+  void setLeaf(IndexT leafIdx) {
     resetDelIdx(0);
     criterion.setLeafIdx(leafIdx);
   }
