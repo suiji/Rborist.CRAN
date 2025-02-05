@@ -30,6 +30,7 @@ Sampler::Sampler(size_t nSamp_,
 		 bool replace_,
 		 const vector<double>& weight,
 		 size_t nHoldout,
+		 unsigned int nFold,
 		 const vector<size_t>& unobserved_) :
   nRep(nRep_),
   nObs(nObs_),
@@ -100,7 +101,7 @@ size_t Sampler::sampleCount(size_t nSpecified,
     nAvail = nObs;
 
   if (nSpecified == 0) {
-    sCount = replace ? nAvail : round(1-exp(-1)*nAvail);
+    sCount = replace ? nAvail : round((1-exp(-1))*nAvail);
   }
   else if (!replace)
     sCount = min(nSpecified, nAvail);

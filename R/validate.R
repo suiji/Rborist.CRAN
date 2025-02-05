@@ -1,4 +1,4 @@
-# Copyright (C)  2012-2024   Mark Seligman
+# Copyright (C)  2012-2025   Mark Seligman
 ##
 ## This file is part of ArboristR.
 ##
@@ -22,14 +22,19 @@ validate.default <- function(train,
                              sampler = NULL,
                              ctgCensus = "votes",
                              impPermute = 0,
-                             quantVec = NULL,
-                             quantiles = !is.null(quantVec),
+                             quantVec = numeric(0),
+                             quantiles = length(quantVec) > 0,
                              indexing = FALSE,
                              trapUnobserved = FALSE,
                              nThread = 0,
                              verbose = FALSE,
                              ...) {
-  if (!inherits(train, "arbTrain"))
+  # TODO:  Hoist class checks.
+  if (inherits(train, "arbTrain"))
+    trainVersion <- as.package_version(train$version)
+  else if (inherits(train, "rfArb"))
+    trainVersion <- as.package_version(train$training$version)
+  else
     stop("Unrecognized training object")
 
   if (is.null(train$forest)) {
@@ -56,8 +61,13 @@ validate.default <- function(train,
       warning("Negative permutation count:  substituting zero.")
       impPermute <- 0
   }
-        
 
+  predictVersion <- packageVersion("Rborist")
+  if (predictVersion$major != trainVersion$major)
+    stop("Mismatched training, prediction major package versions")
+  if (predictVersion$minor > trainVersion$minor)
+    stop(paste("Prediction package minor version ", predictVersion$minor, " more recent than training ", trainVersion$minor))
+        
   argPredict <- list(
       bagging = TRUE,
       impPermute = impPermute,
